@@ -1,19 +1,24 @@
 const SHA256 = require('crypto-js/sha256');
 
+class Transaction {
+  constructor(fromAddress, toAddress, amount) {
+    this.fromAddress = fromAddress;
+    this.toAddress = toAddress;
+    this.amount = amount;
+  }
+}
 
 class Block {
   
   /**
    * Constructor.
-   * @param {int} index - index of block in the chain
-   * @param {string} timestamp - time of creation/edit
-   * @param {object} data - data of transactions
-   * @param {string} previousHash - previous hash for integrity of chain
+   * @param {String} timestamp - time of creation/edit
+   * @param {Array} transactions - transactions
+   * @param {String} previousHash - previous hash for integrity of chain
    */
-  constructor(index, timestamp, data, previousHash = '') {
-    this.index = index;
+  constructor(timestamp, transactions, previousHash = '') {
     this.timestamp = timestamp;
-    this.data = data;
+    this.transactions = transactions;
     this.previousHash = previousHash;
     this.hash = this.calculateHash();
     this.nonce = 0; // random value to change hash
@@ -24,7 +29,7 @@ class Block {
    * @returns SHA256 hash of our block
    */
   calculateHash() {
-    return SHA256(this.index + this.previousHash + this.timestamp + JSON.stringify(this.data) + this.nonce).toString();
+    return SHA256(this.previousHash + this.timestamp + JSON.stringify(this.data) + this.nonce).toString();
   }
 
   /**
@@ -46,14 +51,16 @@ class Blockchain {
   
   constructor() {
     this.chain = [this.createGenesisBlock()];
-    this.difficulty = 4;
+    this.difficulty = 2;
+    this.pendingTransactions = [];
+    this.miningReward = 10;
   }
 
   /**
    * Creates first/genesis block
    */
   createGenesisBlock() {
-    return new Block(0, Date(), "Genesis block", "0")
+    return new Block(Date(), "Genesis block", "0")
   }
 
   /**
@@ -65,13 +72,49 @@ class Blockchain {
   }
 
   /**
-   * Adds a block to the end of the chain
-   * @param {Block} newBlock - block to be added
+   * Mine next block in list of transactions
+   * @param {string} miningRewardAddress 
    */
-  addBlock(newBlock) {
-    newBlock.previousHash = this.getLatestBlock().hash;
-    newBlock.mineBlock(this.difficulty);
-    this.chain.push(newBlock);
+  minePendingTransactions(miningRewardAddress) {
+    let block = new Block(Date(), this.pendingTransactions);
+    block.mineBlock(this.difficulty);
+
+    console.log("Block successfully mined");
+    this.chain.push(block);
+
+    // after mining all transactions, you will be rewarded when next person mines
+    this.pendingTransactions = [
+      new Transaction(null, miningRewardAddress, this.miningReward)
+    ];
+  }
+
+  /**
+   * Create a transaction
+   * @param {Transaction} transaction 
+   */
+  createTransaction(transaction) {
+    this.pendingTransactions.push(transaction);
+  }
+
+  /**
+   * Iterate through block chain to calculate total balance
+   * @param {String} address 
+   */
+  getBalanceOfAddress(address) {
+    let balance = 0;
+
+    for (const block of this.chain) {
+      for (const transaction of block.transactions) {
+        if (transaction.fromAddress === address) {
+          balance -= transaction.amount;
+        }
+
+        if (transaction.toAddress === address) {
+          balance += transaction.amount;
+        }
+      }
+    }
+    return balance;
   }
 
   /**
@@ -96,7 +139,13 @@ class Blockchain {
 }
 
 let nibbleCoin = new Blockchain();
-console.log('Mining block 1...')
-nibbleCoin.addBlock(new Block(1, Date(), {amount: 4}))
-console.log('Mining block 2...')
-nibbleCoin.addBlock(new Block(2, Date(), {amount: 10}))
+nibbleCoin.createTransaction(new Transaction('address1', 'address2', 100));
+nibbleCoin.createTransaction(new Transaction('address2', 'address1', 50));
+
+console.log('\nstarting miner')
+nibbleCoin.minePendingTransactions('joshs-address')
+console.log('\nBalance of josh is: ' + nibbleCoin.getBalanceOfAddress('joshs-address'))
+
+console.log('\nstarting miner again')
+nibbleCoin.minePendingTransactions('joshs-address')
+console.log('\nBalance of josh is: ' + nibbleCoin.getBalanceOfAddress('joshs-address'))
