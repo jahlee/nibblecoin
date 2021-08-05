@@ -1,10 +1,53 @@
 const SHA256 = require('crypto-js/sha256');
+const EC = require('elliptic').ec;
+const ec = new EC('secp256k1');
 
 class Transaction {
   constructor(fromAddress, toAddress, amount) {
     this.fromAddress = fromAddress;
     this.toAddress = toAddress;
     this.amount = amount;
+  }
+
+  /**
+   * Sign hash with private key
+   */
+  calculateHash() {
+    return SHA256(this.fromAddress + this.toAddress + this.amount).toString()
+  }
+
+  /**
+   * sender needs to sign transaction to verify it
+   * @param {Key} signingKey - key of from address
+   */
+  signTransaction(signingKey) {
+    if (signingKey.getPublic('hex') !== this.fromAddress) {
+      throw new Error("You can't sign transactions for other wallets");
+    }
+
+    // hash of transaction
+    const hashTx = this.calculateHash();
+    // signature
+    const sig = signingKey.sign(hashTx, 'base64');
+    // format signature to hex
+    this.signature = sig.toDER('hex');
+  }
+
+  /**
+   * Check transaction is valid
+   * @returns True/False
+   */
+  isValid() {
+    // reward for mining
+    if (this.fromAddress === null) return true;
+
+    if (!this.signature || this.signature.length === 0) {
+      throw new Error('No signature in this transaction');
+    }
+
+    const publicKey = ec.keyFromPublic(this.fromAddress, 'hex');
+    // verify hash of block has been signed
+    return publicKey.verify(this.calculateHash(), this.signature);
   }
 }
 
@@ -45,6 +88,19 @@ class Block {
 
     console.log("Block mined: " + this.hash);
   }
+
+  /**
+   * Iterate through all transactions and make sure all are valid.
+   * @returns True/False
+   */
+  hasValidTransaction() {
+    for (const transaction of this.transactions) {
+      if (!transaction.isValid()) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 class Blockchain {
@@ -53,7 +109,7 @@ class Blockchain {
     this.chain = [this.createGenesisBlock()];
     this.difficulty = 2;
     this.pendingTransactions = [];
-    this.miningReward = 10;
+    this.miningReward = 100;
   }
 
   /**
@@ -76,23 +132,35 @@ class Blockchain {
    * @param {string} miningRewardAddress 
    */
   minePendingTransactions(miningRewardAddress) {
-    let block = new Block(Date(), this.pendingTransactions);
-    block.mineBlock(this.difficulty);
+    // add reward for mining in queue
+    const rewardTx = new Transaction(null, miningRewardAddress, this.miningReward);
+    this.pendingTransactions.push(rewardTx);
 
+    // add this transaction to the block
+    let block = new Block(Date(), this.pendingTransactions, this.getLatestBlock().hash);
+    // mine the block
+    block.mineBlock(this.difficulty);
     console.log("Block successfully mined");
+
+    // add block to chain
     this.chain.push(block);
 
-    // after mining all transactions, you will be rewarded when next person mines
-    this.pendingTransactions = [
-      new Transaction(null, miningRewardAddress, this.miningReward)
-    ];
+    // clear transaction queue
+    this.pendingTransactions = [];
   }
 
   /**
    * Create a transaction
    * @param {Transaction} transaction 
    */
-  createTransaction(transaction) {
+  addTransaction(transaction) {
+    if (!transaction.fromAddress || !transaction.toAddress) {
+      throw new Error('Transaction must have from and to address');
+    }
+
+    if (!transaction.isValid()) {
+      throw new Error('Transaction is invalid')
+    }
     this.pendingTransactions.push(transaction);
   }
 
@@ -122,9 +190,14 @@ class Blockchain {
    * @returns True/False
    */
   isChainValid() {
+    // skip first/genesis block
     for (let i = 1; i < this.chain.length; i++) {
       const currentBlock = this.chain[i];
       const previousBlock = this.chain[i-1];
+
+      if (!currentBlock.hasValidTransaction()) {
+        return false;
+      }
 
       // check hash is correct
       if (currentBlock.hash !== currentBlock.calculateHash())
@@ -138,14 +211,5 @@ class Blockchain {
   }
 }
 
-let nibbleCoin = new Blockchain();
-nibbleCoin.createTransaction(new Transaction('address1', 'address2', 100));
-nibbleCoin.createTransaction(new Transaction('address2', 'address1', 50));
-
-console.log('\nstarting miner')
-nibbleCoin.minePendingTransactions('joshs-address')
-console.log('\nBalance of josh is: ' + nibbleCoin.getBalanceOfAddress('joshs-address'))
-
-console.log('\nstarting miner again')
-nibbleCoin.minePendingTransactions('joshs-address')
-console.log('\nBalance of josh is: ' + nibbleCoin.getBalanceOfAddress('joshs-address'))
+module.exports.Blockchain = Blockchain;
+module.exports.Transaction = Transaction;
