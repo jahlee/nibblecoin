@@ -1,4 +1,7 @@
 {
+  "name": "blockchain",
+  "version": "1.0.0",
+  "description": "learning about blockchain",
   "dependencies": {
     "crypto-js": "^4.1.1",
     "elliptic": "^6.5.4"
