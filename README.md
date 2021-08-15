@@ -1,6 +1,7 @@
 # Nibblecoin
 
 This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 12.0.5.
+Followed a tutorial by Savjee of Simply Explained.
 
 ## Development server
 
