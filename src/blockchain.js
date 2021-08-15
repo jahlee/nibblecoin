@@ -7,6 +7,7 @@ class Transaction {
     this.fromAddress = fromAddress;
     this.toAddress = toAddress;
     this.amount = amount;
+    this.timestamp = new Date();
   }
 
   /**
@@ -116,7 +117,7 @@ class Blockchain {
    * Creates first/genesis block
    */
   createGenesisBlock() {
-    return new Block(Date(), "Genesis block", "0")
+    return new Block(Date(), [], "0")
   }
 
   /**
